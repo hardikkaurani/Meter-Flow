@@ -1,115 +1,64 @@
-# MeterFlow
+# MeterFlow — Usage-Based API Billing Platform
 
-Usage-Based API Billing Platform — an API gateway + metering + billing engine.
+<p align="center">
+  <img src="https://img.shields.io/badge/TypeScript-5.7-blue.svg" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/Node.js-20.x-green.svg" alt="Node.js" />
+  <img src="https://img.shields.io/badge/PostgreSQL-16-blue.svg" alt="PostgreSQL" />
+  <img src="https://img.shields.io/badge/MongoDB-7.0-green.svg" alt="MongoDB" />
+  <img src="https://img.shields.io/badge/Redis-7.2-red.svg" alt="Redis" />
+  <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License" />
+</p>
 
-Wrap third-party APIs, hand out API keys, meter every call, enforce rate limits, and bill
-consumers on metered usage (pay-per-call or tiered).
+MeterFlow is a high-throughput, multi-tenant API gateway and usage-based billing platform designed to meter API requests, enforce strict sliding-window rate limits, aggregate raw access telemetry, and generate accurate usage-based invoices.
 
-## Stack
+---
 
-| Concern            | Choice                                             |
-| ------------------ | -------------------------------------------------- |
-| Frontend           | React (Vite) + Tailwind + React Query + Zustand    |
-| Backend            | Node.js + Express (ESM)                             |
-| Transactional DB   | PostgreSQL via **Prisma**                           |
-| Log store          | MongoDB via Mongoose (raw usage logs, high write)  |
-| Cache / rate limit | Redis (**token-bucket**, atomic Lua)               |
-| Queue              | BullMQ (aggregation, billing, webhooks)            |
-| Realtime           | Socket.io (live usage dashboard)                   |
-| Auth               | JWT (dashboard) + hashed API keys (consumers)      |
+## 🏗 Architecture & Storage Rationale
 
-## Repository layout
+| Datastore | Primary Purpose | Why Selected |
+| :--- | :--- | :--- |
+| **PostgreSQL (Prisma)** | Transactional Source of Truth | Strongly typed relational model for Orgs, Users, API Keys, Pricing Plans, Subscriptions, and Invoices. Guarantees ACID compliance for monetary balances. |
+| **MongoDB (Mongoose)** | High-Volume Telemetry Logs | High write throughput for raw request firehoses. Schema-less flexibility for HTTP headers and payloads without polluting financial databases. |
+| **Redis (ioredis)** | Transient In-Memory Cache | Fast sliding-window rate-limiting token buckets, session caches, and queue backpressure state. Never used as a persistent source of truth. |
+| **BullMQ** | Async Worker Queues | Decouples gateway request processing from log storage and billing rollups. Prevents database write locks from impacting proxy latency. |
 
-```
-Meter-Flow-main/
-├── docker-compose.yml      # Postgres + Mongo + Redis (datastores only)
-├── backend/                # Express API, gateway, queues, sockets
-└── frontend/               # Vite React dashboard
-```
+---
 
-## Quick start
+## ⚡ Quickstart
 
+### 1. Requirements
+- Node.js >= 20
+- Docker & Docker Compose
+
+### 2. Environment Setup
 ```bash
-# 1. Start datastores
-docker compose up -d
+# Clone the repository
+git clone https://github.com/hardikkaurani/Meter-Flow.git
+cd Meter-Flow
 
-# 2. Backend
-cd backend
-cp .env.example .env
+# Install dependencies
 npm install
-npm run prisma:generate     # generate Prisma client
-npm run prisma:migrate      # create tables (first run)
-npm run dev                 # http://localhost:4000/health
 
-# 3. Frontend (separate terminal)
-cd frontend
+# Copy environment variables
 cp .env.example .env
-npm install
-npm run dev                 # http://localhost:5173
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env
 ```
 
-## Build phases
-
-- **Phase 0 — Scaffolding** ✅ (current)
-- **Phase 0 — Scaffolding** ✅
-- **Phase 1 — Auth & org management** ✅
-- **Phase 2 — API & API-key management (CRUD)** ✅
-- **Phase 3 — The gateway (proxy + rate limit + metering)** ✅ ← core USP
-- **Phase 4 — Usage aggregation & billing engine** ✅
-- **Phase 5 — Dashboard (frontend)** ✅
-- Phase 6 — Optional (Stripe, webhooks, audit logs)
-
-## Running the worker
-
-Aggregation + billing run in a **separate process** (BullMQ). In a third terminal:
-
+### 3. Spin up Infrastructure (Datastores)
 ```bash
-cd backend
-npm run worker      # processes usage-aggregation, billing, webhooks queues
+npm run docker:up
 ```
 
-It registers two recurring schedules on boot: usage aggregation every 5 min, and
-monthly invoice generation at 00:10 UTC on the 1st.
+### 4. Run Migrations & Start Development
+```bash
+npm run prisma:migrate --workspace=backend
+npm run dev
+```
 
-## How the gateway works (the core)
+Frontend will run at `http://localhost:5173` and Backend at `http://localhost:5000`.
 
-Consumers call `http://localhost:4000/gw/<upstream-path>` with an `x-api-key`
-header. Each request runs through `backend/src/gateway/gatewayHandler.js`:
+---
 
-1. **Authenticate** — resolve the key via a Redis-cached lookup (`apiKeyCache.js`).
-2. **Rate limit** — atomic Redis token bucket Lua script (`rateLimiter.js`); 429 if empty.
-3. **Proxy** — forward method/path/body/headers to the API's `upstreamBaseUrl`.
-4. **Meter** — fire-and-forget usage log to Mongo + Redis live counters + Socket.io
-   broadcast (`usageLogger.js`). **Never awaited** — logging can't add latency.
-5. **Respond** — stream the upstream response back plus `X-RateLimit-*` headers.
-
-### Try it end-to-end
-
-1. Sign up in the dashboard (`http://localhost:5173`) → creates org + owner.
-2. **APIs & Keys** → create an API, e.g. upstream `https://pokeapi.co/api/v2`.
-3. Generate a key — copy the raw `mf_…` value shown once.
-4. **Playground** → paste the key, `GET pokemon/ditto`, send. You'll see the proxied
-   response + rate-limit headers.
-5. **Live Usage** → watch the request appear in real time via Socket.io.
-6. **Billing** → create a plan, subscribe the key, then generate an invoice.
-
-## API surface
-
-| Area     | Endpoints |
-| -------- | --------- |
-| Auth     | `POST /auth/signup`, `POST /auth/login`, `GET /auth/me` |
-| Org      | `GET/POST /org/members`, `DELETE /org/members/:userId` |
-| APIs     | `GET/POST /apis`, `GET/PATCH/DELETE /apis/:apiId`, `.../endpoints` |
-| Keys     | `GET/POST /apis/:apiId/keys`, `.../:keyId/revoke`, `.../:keyId/rotate` |
-| Billing  | `GET/POST /billing/plans`, `/subscriptions`, `/invoices`, `POST /billing/invoices/generate`, `GET /billing/projected/:apiKeyId` |
-| Gateway  | `ALL /gw/*` (public, `x-api-key` auth) |
-
-## Design notes
-
-- **Postgres = truth** for orgs/keys/plans/invoices; **Mongo = raw logs**; **Redis =
-  fast path only** (rate buckets, key cache, live counters). Billable quantities are
-  aggregated Mongo → Postgres so invoices never depend on ephemeral state.
-- **Keys are sha256(raw + pepper)** — the raw key is returned exactly once and never
-  stored. Fast hash (not bcrypt) because the gateway validates on the hot path and the
-  key is already 256-bit high-entropy.
-- **Token bucket over fixed window** — smooths bursts, O(1) state per key, atomic via Lua.
+## 📄 License
+MIT License. Created by [Hardik Kaurani](mailto:hardikkaurani1@gmail.com).
