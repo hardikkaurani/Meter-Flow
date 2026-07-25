@@ -1,4 +1,3 @@
-// Backend entrypoint: wires datastores, HTTP server, and sockets, then listens.
 import http from 'node:http';
 import { config } from './config/index.js';
 import { createApp } from './app.js';
@@ -6,9 +5,10 @@ import { connectPostgres, disconnectPostgres } from './config/prisma.js';
 import { connectMongo, disconnectMongo } from './config/mongo.js';
 import { connectRedis, disconnectRedis } from './config/redis.js';
 import { initSockets } from './sockets/index.js';
+import { logger } from './utils/logger.js';
 
-async function start() {
-  // Connect datastores up front so the server only accepts traffic when ready.
+async function start(): Promise<void> {
+  // Connect all datastores before accepting traffic
   await Promise.all([connectPostgres(), connectMongo(), connectRedis()]);
 
   const app = createApp();
@@ -16,20 +16,22 @@ async function start() {
   initSockets(server);
 
   server.listen(config.port, () => {
-    console.log(`[server] MeterFlow backend listening on http://localhost:${config.port} (${config.env})`);
+    logger.info(`[Server] MeterFlow backend listening on http://localhost:${config.port} (${config.env})`);
   });
 
-  const shutdown = async (signal) => {
-    console.log(`\n[server] ${signal} received, shutting down...`);
+  const shutdown = async (signal: string) => {
+    logger.info(`[Server] ${signal} received, gracefully shutting down...`);
     server.close();
     await Promise.allSettled([disconnectPostgres(), disconnectMongo(), disconnectRedis()]);
+    logger.info('[Server] Shutdown complete.');
     process.exit(0);
   };
+
   process.on('SIGINT', () => shutdown('SIGINT'));
   process.on('SIGTERM', () => shutdown('SIGTERM'));
 }
 
 start().catch((err) => {
-  console.error('[server] failed to start:', err);
+  logger.error('[Server] Fatal startup error:', err);
   process.exit(1);
 });
