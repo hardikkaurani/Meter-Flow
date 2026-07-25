@@ -57,7 +57,7 @@ export class OrgController {
 
   static async updateMemberRole(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { userId } = req.params;
+      const userId = req.params.userId as string;
       const { role } = updateMemberRoleSchema.parse(req.body);
       const member = await OrgService.updateMemberRole(req.user!.orgId, req.user!.role, userId, role);
       res.status(200).json({

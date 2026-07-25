@@ -10,8 +10,8 @@ describe('MeterFlow Phase 2 Domain Logic Tests', () => {
   });
 
   it('validates tenant isolation authorization rules', () => {
-    const callerOrgId = 'org_acme';
-    const resourceOrgId = 'org_stark';
+    const callerOrgId: string = 'org_acme';
+    const resourceOrgId: string = 'org_stark';
 
     const isAuthorized = callerOrgId === resourceOrgId;
     expect(isAuthorized).toBe(false);

@@ -6,7 +6,7 @@ import { createEndpointSchema, updateEndpointSchema } from '../utils/validation.
 export class EndpointController {
   static async listEndpoints(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { apiId } = req.params;
+      const apiId = req.params.apiId as string;
       const endpoints = await EndpointService.listEndpoints(req.user!.orgId, apiId);
       res.status(200).json({
         success: true,
@@ -19,7 +19,7 @@ export class EndpointController {
 
   static async createEndpoint(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { apiId } = req.params;
+      const apiId = req.params.apiId as string;
       const validatedInput = createEndpointSchema.parse(req.body);
       const endpoint = await EndpointService.createEndpoint(req.user!.orgId, apiId, validatedInput);
       res.status(201).json({
@@ -33,7 +33,8 @@ export class EndpointController {
 
   static async updateEndpoint(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { apiId, endpointId } = req.params;
+      const apiId = req.params.apiId as string;
+      const endpointId = req.params.endpointId as string;
       const validatedInput = updateEndpointSchema.parse(req.body);
       const endpoint = await EndpointService.updateEndpoint(
         req.user!.orgId,
@@ -52,7 +53,8 @@ export class EndpointController {
 
   static async deleteEndpoint(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { apiId, endpointId } = req.params;
+      const apiId = req.params.apiId as string;
+      const endpointId = req.params.endpointId as string;
       const result = await EndpointService.deleteEndpoint(req.user!.orgId, apiId, endpointId);
       res.status(200).json({
         success: true,

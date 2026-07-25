@@ -18,7 +18,7 @@ export class ApiController {
 
   static async getApiById(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { apiId } = req.params;
+      const apiId = req.params.apiId as string;
       const api = await ApiService.getApiById(req.user!.orgId, apiId);
       res.status(200).json({
         success: true,
@@ -44,7 +44,7 @@ export class ApiController {
 
   static async updateApi(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { apiId } = req.params;
+      const apiId = req.params.apiId as string;
       const validatedInput = updateApiSchema.parse(req.body);
       const api = await ApiService.updateApi(req.user!.orgId, apiId, validatedInput);
       res.status(200).json({
@@ -58,7 +58,7 @@ export class ApiController {
 
   static async archiveApi(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { apiId } = req.params;
+      const apiId = req.params.apiId as string;
       const api = await ApiService.archiveApi(req.user!.orgId, apiId);
       res.status(200).json({
         success: true,
@@ -71,7 +71,7 @@ export class ApiController {
 
   static async deleteApi(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { apiId } = req.params;
+      const apiId = req.params.apiId as string;
       const result = await ApiService.deleteApi(req.user!.orgId, apiId);
       res.status(200).json({
         success: true,
