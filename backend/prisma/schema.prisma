@@ -1,6 +1,5 @@
 // MeterFlow transactional schema (Postgres).
 // Source of truth for orgs, users, APIs, keys, plans, and billing.
-// Raw usage logs live in Mongo; only rolled-up usage lands back here (Phase 4).
 
 generator client {
   provider = "prisma-client-js"
@@ -15,6 +14,17 @@ enum UserRole {
   owner
   admin
   viewer
+}
+
+enum ApiEnvironment {
+  development
+  staging
+  production
+}
+
+enum ApiStatus {
+  active
+  archived
 }
 
 enum KeyStatus {
@@ -38,32 +48,71 @@ model Organization {
   id        String   @id @default(cuid())
   name      String
   createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
 
-  users    User[]
-  apis     Api[]
-  plans    Plan[]
-  invoices Invoice[]
+  users       User[]
+  apis        Api[]
+  plans       Plan[]
+  invoices    Invoice[]
+  invitations Invitation[]
 }
 
 model User {
-  id           String       @id @default(cuid())
+  id           String   @id @default(cuid())
   orgId        String
-  email        String       @unique
+  email        String   @unique
+  name         String?
   passwordHash String
-  role         UserRole     @default(owner)
-  createdAt    DateTime     @default(now())
+  role         UserRole @default(owner)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @default(now()) @updatedAt
 
-  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  organization  Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  refreshTokens RefreshToken[]
 
   @@index([orgId])
 }
 
+model RefreshToken {
+  id               String   @id @default(cuid())
+  userId           String
+  tokenHash        String   @unique
+  expiresAt        DateTime
+  revoked          Boolean  @default(false)
+  replacedByToken  String?
+  createdAt        DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Invitation {
+  id        String   @id @default(cuid())
+  orgId     String
+  email     String
+  role      UserRole @default(viewer)
+  token     String   @unique
+  expiresAt DateTime
+  accepted  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@index([email])
+}
+
 model Api {
-  id             String   @id @default(cuid())
-  orgId          String
-  name           String
+  id              String         @id @default(cuid())
+  orgId           String
+  name            String
+  description     String?
   upstreamBaseUrl String
-  createdAt      DateTime @default(now())
+  environment     ApiEnvironment @default(production)
+  status          ApiStatus      @default(active)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @default(now()) @updatedAt
 
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   endpoints    Endpoint[]
@@ -73,11 +122,15 @@ model Api {
 }
 
 model Endpoint {
-  id          String  @id @default(cuid())
+  id          String   @id @default(cuid())
   apiId       String
   path        String
   method      String
-  costPerCall Decimal @default(0) @db.Decimal(12, 6)
+  description String?
+  costPerCall Decimal  @default(0) @db.Decimal(12, 6)
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
 
   api Api @relation(fields: [apiId], references: [id], onDelete: Cascade)
 
@@ -85,14 +138,14 @@ model Endpoint {
 }
 
 model ApiKey {
-  id             String    @id @default(cuid())
-  apiId          String
-  keyHash        String    @unique // sha256(rawKey + pepper) — raw key never stored
-  keyPrefix      String // first chars, shown in UI to identify a key
-  status         KeyStatus @default(active)
-  rateLimitPerMin Int      @default(60)
-  createdAt      DateTime  @default(now())
-  revokedAt      DateTime?
+  id              String    @id @default(cuid())
+  apiId           String
+  keyHash         String    @unique // sha256(rawKey + pepper) — raw key never stored
+  keyPrefix       String // first chars, shown in UI to identify a key
+  status          KeyStatus @default(active)
+  rateLimitPerMin Int       @default(60)
+  createdAt       DateTime  @default(now())
+  revokedAt       DateTime?
 
   api           Api            @relation(fields: [apiId], references: [id], onDelete: Cascade)
   subscriptions Subscription[]
@@ -101,13 +154,10 @@ model ApiKey {
   @@index([apiId])
 }
 
-// Daily rolled-up usage per key. Written by the aggregation worker (Phase 4)
-// from Mongo usage_logs, then summed by the billing engine. Keeps Postgres the
-// source of truth for billable quantities while Mongo stays the raw firehose.
 model UsageRollup {
   id             String   @id @default(cuid())
   apiKeyId       String
-  date           DateTime @db.Date // the UTC day this rollup covers
+  date           DateTime @db.Date
   requests       Int      @default(0)
   errors         Int      @default(0)
   totalLatencyMs BigInt   @default(0)
@@ -120,12 +170,12 @@ model UsageRollup {
 }
 
 model Plan {
-  id           String       @id @default(cuid())
-  orgId        String
-  name         String
-  pricePerUnit Decimal      @default(0) @db.Decimal(12, 6)
-  freeTierUnits Int         @default(0)
-  billingCycle BillingCycle @default(monthly)
+  id            String       @id @default(cuid())
+  orgId         String
+  name          String
+  pricePerUnit  Decimal      @default(0) @db.Decimal(12, 6)
+  freeTierUnits Int          @default(0)
+  billingCycle  BillingCycle @default(monthly)
 
   organization  Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
   subscriptions Subscription[]
