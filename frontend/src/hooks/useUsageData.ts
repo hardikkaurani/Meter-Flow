@@ -1,5 +1,4 @@
 import { useQuery } from '@tanstack/react-query';
-import { apiClient } from '../services/apiClient.js';
 import { UsageSummary } from '../types/index.js';
 
 export function useUsageSummary(orgId: string) {
