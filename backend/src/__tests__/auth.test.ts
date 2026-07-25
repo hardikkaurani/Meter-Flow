@@ -18,8 +18,6 @@ describe('MeterFlow Phase 2 Domain Logic Tests', () => {
   });
 
   it('enforces RBAC permission hierarchy', () => {
-    const roles = ['owner', 'admin', 'viewer'];
-
     const canDeleteOrg = (role: string) => role === 'owner';
     const canManageApis = (role: string) => role === 'owner' || role === 'admin';
 
