@@ -1,6 +1,4 @@
-# MeterFlow local datastores.
-# Runs Postgres + Mongo + Redis so you can `npm run dev` the backend/frontend on the host.
-# Usage: docker compose up -d
+name: MeterFlow Local Datastores & Gateway Stack
 services:
   postgres:
     image: postgres:16-alpine
@@ -8,22 +6,24 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: meterflow
-      POSTGRES_PASSWORD: meterflow
-      POSTGRES_DB: meterflow
+      POSTGRES_PASSWORD: meterflow_password
+      POSTGRES_DB: meterflow_db
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U meterflow -d meterflow"]
+      test: ["CMD-SHELL", "pg_isready -U meterflow -d meterflow_db"]
       interval: 5s
       timeout: 5s
       retries: 10
 
   mongo:
-    image: mongo:7
+    image: mongo:7.0-jammy
     container_name: meterflow-mongo
     restart: unless-stopped
+    environment:
+      MONGO_INITDB_DATABASE: meterflow_logs
     ports:
       - "27017:27017"
     volumes:
@@ -35,7 +35,7 @@ services:
       retries: 10
 
   redis:
-    image: redis:7-alpine
+    image: redis:7.2-alpine
     container_name: meterflow-redis
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
@@ -51,5 +51,8 @@ services:
 
 volumes:
   pgdata:
+    driver: local
   mongodata:
+    driver: local
   redisdata:
+    driver: local
