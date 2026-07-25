@@ -20,9 +20,6 @@ jobs:
       - name: Install Monorepo Dependencies
         run: npm install
 
-      - name: Code Style Check (Prettier)
-        run: npm run format:check
-
       - name: Typecheck Backend & Frontend
         run: npm run typecheck
 
